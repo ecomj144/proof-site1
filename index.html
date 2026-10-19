@@ -1344,6 +1344,16 @@ body.ready .reel-ghost{opacity:1}
   .ia-frame{opacity:1!important;transform:none!important}
   .js .idea-art .ib{opacity:1!important;transform:none!important}
 }
+
+/* marquee on the compositor: smooth while scrolling on every device */
+.kmq{contain:paint}
+.kmq-track{transform:translate3d(0,0,0);backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.kmq-track.mq-run{animation:mqLoop var(--mq-dur,40s) linear infinite}
+.kmq-track.mq-run[data-mq="-1"]{animation-direction:reverse}
+@keyframes mqLoop{from{transform:translate3d(0,0,0)}to{transform:translate3d(var(--mq-shift,-50%),0,0)}}
+.kmq.mq-off .kmq-track{animation-play-state:paused}
+@media (hover:hover) and (pointer:fine){.kmq:hover .kmq-track{animation-play-state:paused}}
+@media (prefers-reduced-motion:reduce){.kmq-track.mq-run{animation:none}}
 </style>
 </head>
 <body>
@@ -2267,32 +2277,26 @@ body.ready .reel-ghost{opacity:1}
 })();
 </script>
 <script>
-/* category marquee: constant drift, unaffected by scrolling; pauses on hover and offscreen */
+/* category marquee: a pure CSS transform animation, so it runs on the compositor and never hitches while the page scrolls.
+   JS only measures the loop length once (and on resize) to keep a constant speed. */
 (function(){
   var band=document.querySelector('.kmq'); if(!band) return;
-  var rows=[].slice.call(band.querySelectorAll('[data-mq]')).map(function(el){
-    return {el:el, dir:parseFloat(el.dataset.mq)||1, base:parseFloat(el.dataset.speed)||0.05, cur:parseFloat(el.dataset.speed)||0.05, x:0, half:1};
-  });
-  function measure(){ rows.forEach(function(r){ r.half=r.el.scrollWidth/2 || 1; }); }
-  measure(); window.addEventListener('resize',measure);
-  if(document.fonts&&document.fonts.ready) document.fonts.ready.then(measure);
+  var tracks=[].slice.call(band.querySelectorAll('[data-mq]'));
   if(matchMedia('(prefers-reduced-motion:reduce)').matches) return;
-  var vel=0, hover=false, onscreen=true, lastY=window.scrollY, last=performance.now();
-  band.addEventListener('mouseenter',function(){hover=true;});
-  band.addEventListener('mouseleave',function(){hover=false;});
-  new IntersectionObserver(function(es){ onscreen=es[0].isIntersecting; }).observe(band);
-  (function tick(t){
-    var dt=Math.min(t-last,48); last=t;
-    if(onscreen){
-      rows.forEach(function(r){
-        r.cur += ((hover?0:r.base) - r.cur)*Math.min(1,dt/240);
-        r.x -= r.dir*r.cur*dt;
-        r.x = ((r.x % r.half) - r.half) % r.half;
-        r.el.style.transform='translate3d('+r.x.toFixed(2)+'px,0,0)';
-      });
-    }
-    requestAnimationFrame(tick);
-  })(last);
+  function setup(){
+    tracks.forEach(function(t){
+      var half=t.scrollWidth/2; if(!half) return;
+      var pxPerSec=(parseFloat(t.dataset.speed)||0.06)*1000;
+      t.style.setProperty('--mq-dur',(half/pxPerSec).toFixed(2)+'s');
+      t.style.setProperty('--mq-shift',(-half).toFixed(1)+'px');
+      t.classList.add('mq-run');
+    });
+  }
+  var rt=null, lastW=window.innerWidth;
+  setup();
+  if(document.fonts&&document.fonts.ready) document.fonts.ready.then(setup);
+  window.addEventListener('resize',function(){ if(window.innerWidth===lastW) return; lastW=window.innerWidth; clearTimeout(rt); rt=setTimeout(setup,200); });
+  new IntersectionObserver(function(es){ band.classList.toggle('mq-off',!es[0].isIntersecting); }).observe(band);
 })();
 </script>
 <script>
